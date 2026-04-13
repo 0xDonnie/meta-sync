@@ -28,6 +28,7 @@ config.yaml
 geocache.json
 processed.json
 synced_files.json
+manifest.json
 staging/
 report.html
 orchestrator.log
@@ -36,3 +37,4 @@ safe_to_delete_meta.json
 logs/
 *.log
 *.old
+*.lnk

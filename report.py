@@ -39,6 +39,8 @@ def load_config(path: str = "config.yaml") -> dict:
 
 
 def human_size(n: int) -> str:
+    if n <= 0:
+        return "—"
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024:
             return f"{n:.1f} {unit}"
@@ -106,68 +108,87 @@ def lookup_country(lat: float, lon: float, geocache: list[dict], radius_km: floa
     return None
 
 
-def scan_synced_via_destination(config: dict) -> list[dict]:
-    """Fallback when staging has been cleaned: list Z: META-AI folder NAMES
-    (not contents — fast over WiFi) and count files from synced_files.json
-    grouped by the month in each filename."""
-    synced_path = Path(config.get("synced_file", "synced_files.json"))
-    if not synced_path.exists():
-        return []
-    try:
-        synced_names = json.loads(synced_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+def scan_from_manifest(manifest_path: Path = None) -> list[dict]:
+    """Read everything (meta + camera) from the manifest file."""
+    from manifest import load_manifest, META_FOLDER_RE, CAMERA_FLAT_RE, CAMERA_QUARTER_RE
+
+    data = load_manifest()
+    if not data.get("folders"):
         return []
 
+    folders: list[dict] = []
+    for folder_name, files_dict in sorted(data["folders"].items()):
+        m = FOLDER_PATTERN.match(folder_name)
+        if m:
+            year = m.group(1)
+            month = m.group(2)
+            country = m.group(3)
+            label = country
+        elif CAMERA_FLAT_RE.match(folder_name):
+            year = folder_name.split()[0]
+            month = "flat"
+            country = "Camera"
+            label = "Camera"
+        elif CAMERA_QUARTER_RE.match(folder_name):
+            parts = folder_name.split()
+            year = parts[0]
+            month = parts[1]  # Q1, Q2, ...
+            country = "Camera"
+            label = "Camera"
+        else:
+            continue
+
+        files = [{"name": fname, "size": size} for fname, size in files_dict.items()]
+        total_size = sum(f["size"] for f in files)
+        folders.append({
+            "folder": folder_name,
+            "year": year,
+            "month": month,
+            "country": label,
+            "count": len(files),
+            "size": total_size,
+            "files": sorted(files, key=lambda x: x["name"]),
+        })
+    return folders
+
+
+def scan_synced_via_destination(config: dict) -> list[dict]:
+    """Fallback when staging has been cleaned. Uses manifest if available."""
+    from manifest import MANIFEST_PATH
+    if MANIFEST_PATH.exists():
+        return scan_from_manifest()
+    # No manifest: do a quick listing without per-file stat (sizes will be 0)
     dest_root = Path(config["destination_dir"])
     if not dest_root.exists():
         return []
-
-    # List only folder names (no per-file stat — fast)
-    folder_by_ym: dict[str, list[str]] = defaultdict(list)
+    folders: list[dict] = []
     try:
-        for entry in dest_root.iterdir():
-            if not entry.is_dir():
-                continue
-            m = FOLDER_PATTERN.match(entry.name)
-            if m:
-                ym = f"{m.group(1)}.{m.group(2)}"
-                folder_by_ym[ym].append(entry.name)
+        meta_folders = sorted(
+            e for e in dest_root.iterdir()
+            if e.is_dir() and FOLDER_PATTERN.match(e.name)
+        )
     except OSError:
         return []
-
-    # Group filenames by year.month parsed from filename
-    files_by_ym: dict[str, list[str]] = defaultdict(list)
-    for name in synced_names:
-        stem = Path(name).stem
-        for part in stem.replace("-", "_").split("_"):
-            if len(part) == 8 and part.isdigit():
-                try:
-                    dt = datetime.strptime(part, "%Y%m%d")
-                    files_by_ym[dt.strftime("%Y.%m")].append(name)
-                    break
-                except ValueError:
-                    continue
-
-    folders = []
-    for ym, folder_names in sorted(folder_by_ym.items()):
-        files_this_ym = sorted(files_by_ym.get(ym, []))
-        # If there are multiple country folders for this month, just list them
-        # without per-file breakdown (since we can't know which file is in which).
-        for fname in sorted(folder_names):
-            m = FOLDER_PATTERN.match(fname)
-            if not m:
-                continue
-            country = m.group(3)
-            folders.append({
-                "folder": fname,
-                "year": m.group(1),
-                "month": m.group(2),
-                "country": country,
-                "count": len(files_this_ym) if len(folder_names) == 1 else 0,
-                "size": 0,
-                "files": [{"name": n, "size": 0} for n in files_this_ym]
-                         if len(folder_names) == 1 else [],
-            })
+    for entry in meta_folders:
+        m = FOLDER_PATTERN.match(entry.name)
+        if not m:
+            continue
+        files = []
+        try:
+            for f in entry.iterdir():
+                if f.is_file():
+                    files.append({"name": f.name, "size": 0})
+        except OSError:
+            continue
+        folders.append({
+            "folder": entry.name,
+            "year": m.group(1),
+            "month": m.group(2),
+            "country": m.group(3),
+            "count": len(files),
+            "size": 0,
+            "files": sorted(files, key=lambda x: x["name"]),
+        })
     return folders
 
 

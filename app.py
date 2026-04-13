@@ -19,13 +19,15 @@ Usage:
 import os
 import subprocess
 import sys
+import threading
 import tkinter as tk
 import webbrowser
 from pathlib import Path
 from tkinter import ttk
 
 sys.path.insert(0, str(Path(__file__).parent))
-from report import load_config, scan_local, scan_camera_local, render_html, human_size
+from report import load_config, scan_from_manifest, render_html, human_size
+from manifest import load_manifest, incremental_update, save_manifest, MANIFEST_PATH
 
 META_DIR = Path("D:/GitHub/meta-sync")
 CAMERA_DIR = Path("D:/GitHub/camera-sync")
@@ -76,10 +78,13 @@ class MetaSyncApp:
 
         self.folders: list[dict] = []
         self.phone_state = "unknown"
+        self._loading = False
 
         self._build()
-        self.refresh_data()
-        self.check_phone()
+        # Defer heavy startup work so the window appears immediately.
+        # Both tasks run in background threads.
+        self.root.after(100, self.refresh_data_async)
+        self.root.after(150, self.check_phone_async)
 
     # -------- UI construction --------
 
@@ -187,27 +192,59 @@ class MetaSyncApp:
 
     # -------- Data --------
 
-    def refresh_data(self):
-        meta_folders: list[dict] = []
-        camera_folders: list[dict] = []
-        try:
-            config = load_config(str(META_DIR / "config.yaml"))
-            meta_folders = scan_local(config)
-        except Exception as e:
-            print(f"meta scan error: {e}")
-        try:
-            camera_folders = scan_camera_local()
-        except Exception as e:
-            print(f"camera scan error: {e}")
-        self.folders = meta_folders + camera_folders
+    def refresh_data_async(self):
+        """Load from manifest (instant) + incremental update in background."""
+        if self._loading:
+            return
+        self._loading = True
+        self.phone_status.config(text="● loading from manifest...", fg=MUTED)
+
+        def worker():
+            folders: list[dict] = []
+            try:
+                # Step 1: load manifest (instant)
+                folders = scan_from_manifest()
+            except Exception as e:
+                print(f"manifest load error: {e}")
+            # Update UI with manifest data first (fast)
+            self.root.after(0, lambda: self._finalize_refresh(folders))
+
+            # Step 2: try incremental update (scan Z: for new files only)
+            try:
+                config = load_config(str(META_DIR / "config.yaml"))
+                dest_root = Path(config["destination_dir"])
+                existing = load_manifest()
+                updated, new_count = incremental_update(dest_root, existing.get("folders", {}), config)
+                if new_count > 0:
+                    save_manifest({"folders": updated})
+                    # Reload UI with updated data
+                    folders2 = scan_from_manifest()
+                    self.root.after(0, lambda: self._finalize_refresh(folders2))
+                    print(f"manifest incremental: +{new_count} new files")
+            except Exception as e:
+                print(f"manifest update error: {e}")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finalize_refresh(self, folders: list[dict]):
+        self.folders = folders
         self._render_stats()
         self._render_tree()
-        # Also regenerate the HTML report so "Open HTML report" stays in sync
-        try:
-            source_label = "local staging + EXIF + geocache + camera trackers"
-            REPORT_HTML.write_text(render_html(self.folders, source_label), encoding="utf-8")
-        except Exception as e:
-            print(f"html regen error: {e}")
+        self._loading = False
+        # Re-run the phone check to restore the real status label
+        self.check_phone_async()
+        # Regenerate HTML report in background too
+        def regen():
+            try:
+                source_label = "local staging + EXIF + geocache + camera trackers"
+                REPORT_HTML.write_text(render_html(self.folders, source_label), encoding="utf-8")
+            except Exception as e:
+                print(f"html regen error: {e}")
+        threading.Thread(target=regen, daemon=True).start()
+
+    def refresh_data(self):
+        """Synchronous version for the toolbar button; delegates to async."""
+        self.refresh_data_async()
 
     def _render_stats(self):
         for w in self.stats_frame.winfo_children():
@@ -280,20 +317,28 @@ class MetaSyncApp:
 
     # -------- Phone --------
 
-    def check_phone(self):
+    def check_phone_async(self):
+        """Non-blocking phone check via a worker thread."""
         self.phone_status.config(text="● checking...", fg=MUTED)
-        self.root.update_idletasks()
-        connected = is_phone_connected()
+
+        def worker():
+            connected = is_phone_connected()
+            self.root.after(0, lambda: self._apply_phone_state(connected))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_phone_state(self, connected: bool):
         self.phone_state = "connected" if connected else "disconnected"
         if connected:
             self.phone_status.config(text="● Phone connected", fg=GREEN)
-            for b in (self.btn_meta, self.btn_camera, self.btn_both):
-                b.config(state="normal")
         else:
             self.phone_status.config(text="● No phone detected", fg=RED)
-            # Camera can still run in offline mode on staging, so keep enabled
-            for b in (self.btn_meta, self.btn_camera, self.btn_both):
-                b.config(state="normal")
+        for b in (self.btn_meta, self.btn_camera, self.btn_both):
+            b.config(state="normal")
+
+    def check_phone(self):
+        """Sync wrapper used by the button."""
+        self.check_phone_async()
 
     # -------- Sync actions --------
 
