@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE / Claude Code
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project — personal data, NEVER push to GitHub
+config.yaml
+geocache.json
+processed.json
+synced_files.json
+staging/
+report.html
+orchestrator.log
+orchestrator_status.json
+safe_to_delete_meta.json
+logs/
+*.log
+*.old

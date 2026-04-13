@@ -1,0 +1,42 @@
+# Meta Sync Configuration
+# Copy this file to config.yaml and adjust paths
+
+# --- Watcher mode (watcher.py) ---
+# Path on the Android phone where Ray-Ban Meta saves photos
+phone_path: "/sdcard/Download/Meta AI"
+
+# Local staging folder (temp, photos are pulled here from phone before organizing)
+staging_dir: "staging"
+
+# --- Manual mode (meta_sync.py) ---
+# If you prefer to copy photos manually from phone, put them here
+source_dir: "D:/MetaImport"
+
+# --- Destination ---
+# Where organized photos will be copied (write-only, originals are NEVER deleted)
+destination_dir: "Z:/"
+
+# File extensions to process
+extensions:
+  - .jpg
+  - .jpeg
+  - .png
+  - .heic
+  - .mp4
+  - .mov
+
+# Fallback city name when GPS data is missing
+fallback_city: "Unknown"
+
+# Geocoding cache file (avoids repeated API calls for same coordinates)
+cache_file: "geocache.json"
+
+# Minimum distance (km) between two GPS points to consider them different cities
+# Coordinates within this radius reuse the cached city name
+cluster_radius_km: 15
+
+# Tracker file (keeps SHA-256 hashes of processed files to avoid duplicates)
+tracker_file: "processed.json"
+
+# Logging
+log_file: "meta_sync.log"
