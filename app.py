@@ -61,9 +61,30 @@ def is_phone_connected() -> bool:
     return False
 
 
+# Path to python.exe — we may be running under pythonw.exe (GUI, no console),
+# but the sync scripts we launch should open a visible console so the user
+# can see the progress output.
+def _python_console_exe() -> str:
+    """Return the path to python.exe that matches sys.executable."""
+    exe = Path(sys.executable)
+    # sys.executable is pythonw.exe when the app is launched via pythonw
+    if exe.name.lower() == "pythonw.exe":
+        candidate = exe.with_name("python.exe")
+        if candidate.exists():
+            return str(candidate)
+    return str(exe)
+
+
+PYTHON_EXE = _python_console_exe()
+
+
 def launch(cmd: list, cwd: str):
+    """Launch a sync script in a new visible console window."""
+    # Replace sys.executable (pythonw.exe) with python.exe so the child
+    # process can actually write to its new console.
+    fixed = [PYTHON_EXE if Path(str(c)).name.lower() == "pythonw.exe" else c for c in cmd]
     subprocess.Popen(
-        cmd, cwd=cwd,
+        fixed, cwd=cwd,
         creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
     )
 

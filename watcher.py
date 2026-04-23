@@ -58,12 +58,18 @@ def save_synced(config: dict, synced: set[str]):
 # ADB helpers
 # ---------------------------------------------------------------------------
 
+# Avoid a flashing console window for every ADB call when we're running
+# under pythonw (no parent console).
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
 def adb_available() -> bool:
     """Check if a phone is connected via ADB."""
     try:
         result = subprocess.run(
             ["adb", "devices"],
             capture_output=True, text=True, timeout=10,
+            creationflags=NO_WINDOW,
         )
         for line in result.stdout.strip().splitlines()[1:]:
             parts = line.split()
@@ -82,6 +88,7 @@ def adb_list_files(phone_path: str) -> list[str]:
         result = subprocess.run(
             ["adb", "shell", f"ls '{phone_path}'"],
             capture_output=True, text=True, timeout=15, env=env,
+            creationflags=NO_WINDOW,
         )
         if result.returncode != 0:
             return []
@@ -100,6 +107,7 @@ def adb_pull_file(phone_path: str, filename: str, local_dir: Path) -> bool:
         result = subprocess.run(
             ["adb", "pull", remote, str(local)],
             capture_output=True, text=True, timeout=120, env=env,
+            creationflags=NO_WINDOW,
         )
         return result.returncode == 0
     except subprocess.TimeoutExpired:
