@@ -131,12 +131,22 @@ class MetaSyncApp:
         # Sync buttons row
         sync_bar = tk.Frame(self.root, bg=BG, padx=20)
         sync_bar.pack(fill="x", pady=(0, 14))
+        # ADB-based buttons (require USB debugging enabled)
         self.btn_meta = self._btn(sync_bar, "Sync Meta", lambda: self.run_sync("meta"), primary=True)
         self.btn_meta.pack(side="left", padx=3)
         self.btn_camera = self._btn(sync_bar, "Sync Camera", lambda: self.run_sync("camera"), primary=True)
         self.btn_camera.pack(side="left", padx=3)
         self.btn_both = self._btn(sync_bar, "Sync Both", lambda: self.run_sync("both"), primary=True)
         self.btn_both.pack(side="left", padx=3)
+
+        # Separator
+        tk.Label(sync_bar, text="  │  ", fg=BORDER, bg=BG,
+                 font=("Segoe UI", 12)).pack(side="left")
+
+        # MTP-based buttons (no USB debugging required — file transfer mode only)
+        self._btn(sync_bar, "MTP Meta", lambda: self.run_mtp("meta")).pack(side="left", padx=3)
+        self._btn(sync_bar, "MTP Camera", lambda: self.run_mtp("camera")).pack(side="left", padx=3)
+        self._btn(sync_bar, "MTP Both", lambda: self.run_mtp("both")).pack(side="left", padx=3)
 
         # Stats cards
         self.stats_frame = tk.Frame(self.root, bg=BG, padx=20)
@@ -371,6 +381,17 @@ class MetaSyncApp:
         elif action == "both":
             launch([sys.executable, "-u", str(META_DIR / "watcher.py"), "--once"], str(META_DIR))
             launch([sys.executable, "-u", str(CAMERA_DIR / "camera_sync.py")], str(CAMERA_DIR))
+
+    def run_mtp(self, action: str):
+        """MTP-based pull (no USB debugging required). Then run the organizer."""
+        mtp = str(META_DIR / "mtp_pull.py")
+        if action == "meta":
+            launch([sys.executable, "-u", mtp, "--job", "meta", "--then-organize"], str(META_DIR))
+        elif action == "camera":
+            launch([sys.executable, "-u", mtp, "--job", "camera-flat", "--then-organize"], str(META_DIR))
+            launch([sys.executable, "-u", mtp, "--job", "camera-quarter", "--then-organize"], str(META_DIR))
+        elif action == "both":
+            launch([sys.executable, "-u", mtp, "--job", "all", "--then-organize"], str(META_DIR))
 
     def open_report(self):
         if not REPORT_HTML.exists():

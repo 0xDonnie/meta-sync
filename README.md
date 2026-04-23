@@ -32,6 +32,7 @@ matching size.
 | `report.py` | Generates a static HTML report grouped by month/country with a search bar |
 | `manifest.py` | Caches the list of files on the destination (`manifest.json`) so the report is instant and incremental updates are cheap |
 | `app.py` | Native Tkinter GUI that combines the report view with Sync buttons and on-demand phone status check |
+| `mtp_pull.py` | Windows-only alternative to ADB: pulls phone files via Windows MTP (no USB debugging required) |
 
 The **Camera Samsung** flow (for regular Samsung camera photos) lives in the
 separate [camera-sync](../camera-sync) repo.
@@ -73,9 +74,9 @@ cluster_radius_km: 15                        # GPS clustering radius for cache
 3. The top bar shows the phone status (green = connected, red = not). Click
    **Check phone** if you just plugged it in.
 4. Click one of the Sync buttons:
-   - **Sync Meta** → pulls new Ray-Ban Meta photos and organizes them
-   - **Sync Camera** → runs the camera-sync flow for regular camera photos
-   - **Sync Both** → runs both in sequence
+   - **Sync Meta / Camera / Both** → ADB-based sync (requires USB debugging)
+   - **MTP Meta / Camera / Both** → MTP-based sync (no USB debugging — just
+     plug the phone in as *File transfer*, Windows-only, uses pywin32)
 5. Each sync opens its own console window so you can watch the progress.
 6. When the sync is done, click **Refresh** in the GUI. This:
    - Runs an incremental `manifest.json` update (only stats files that weren't
@@ -87,7 +88,8 @@ cluster_radius_km: 15                        # GPS clustering radius for cache
 ### Command line equivalents
 
 ```bash
-python watcher.py --once      # pull new Meta photos from phone, organize them
+python watcher.py --once      # pull new Meta photos from phone via ADB
+python mtp_pull.py --job all --then-organize   # pull + organize via MTP (no ADB)
 python meta_sync.py           # organize whatever is already in the staging folder
 python report.py --local      # regenerate report.html from local data
 python manifest.py --build    # first-time scan of the destination

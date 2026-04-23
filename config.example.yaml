@@ -40,3 +40,16 @@ tracker_file: "processed.json"
 
 # Logging
 log_file: "meta_sync.log"
+
+# --- MTP transport (mtp_pull.py — pull from phone without USB debug) ---
+# Partial, case-insensitive match against the device name shown under "This PC"
+mtp_device_name: "Fold7"
+
+# Path on the phone (MTP navigation uses "/" to separate components)
+mtp_meta_path: "Internal storage/Download/Meta AI"
+mtp_camera_flat_path: "Internal storage/DCIM/2025"
+mtp_camera_quarter_path: "Internal storage/DCIM/Camera"
+
+# Where the MTP pull drops camera files before camera_sync --offline picks them up
+mtp_camera_flat_staging: "D:/GitHub/camera-sync/staging_camera/DCIM_2025"
+mtp_camera_quarter_staging: "D:/GitHub/camera-sync/staging_camera/DCIM_Camera"
